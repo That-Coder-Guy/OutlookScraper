@@ -1,0 +1,13 @@
+From: Campus Activities Board <cab@university.edu>
+Subject: Free pizza at the CS Club kickoff!
+Received: 2026-09-01T14:02:00-04:00
+
+Hey everyone,
+
+The Computer Science Club is kicking off the semester this Friday, September 4th,
+at 5:00 PM in Kemper Hall room 1131.
+
+We'll have FREE PIZZA and soda for everyone who shows up, plus a short intro to
+our project teams for the fall. No RSVP needed, just come hungry.
+
+See you there!

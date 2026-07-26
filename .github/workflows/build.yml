@@ -1,0 +1,38 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  # Builds and tests everything that matters. Core holds all the logic, so this is
+  # where the real coverage is — and it runs on Linux because Core deliberately has
+  # no Windows dependencies.
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet restore OutlookScraper.Linux.slnf
+      - run: dotnet build OutlookScraper.Linux.slnf --no-restore -c Release
+      - run: dotnet test OutlookScraper.Linux.slnf --no-build -c Release --verbosity normal
+
+  # The only job that actually compiles the WPF, COM and toast code. Uses the NuGet
+  # interop package rather than a <COMReference>, so no Office install is needed here.
+  app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet restore OutlookScraper.sln
+      - run: dotnet build OutlookScraper.sln --no-restore -c Release
+      - run: dotnet publish src/OutlookScraper.App/OutlookScraper.App.csproj -c Release -r win-x64 --self-contained false -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OutlookScraper-win-x64
+          path: publish/

@@ -1,0 +1,25 @@
+# Build output
+bin/
+obj/
+publish/
+*.user
+*.suo
+
+# Secrets — the Google OAuth client the user downloads from Cloud Console.
+# Desktop-app client secrets are not truly secret (RFC 8252), but keeping this
+# out of the tree means the repo stays publishable.
+client_secret.json
+google-token/
+
+# Local runtime state
+*.db
+*.db-shm
+*.db-wal
+settings.json
+logs/
+
+# Editors
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
