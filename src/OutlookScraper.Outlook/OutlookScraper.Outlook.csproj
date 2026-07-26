@@ -35,9 +35,13 @@
     <PackageReference Include="Microsoft.Office.Interop.Outlook" Version="15.0.4797.1004" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- WindowsBase supplies the Dispatcher used to pump the dedicated STA thread. -->
-    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
-  </ItemGroup>
+  <PropertyGroup>
+    <!--
+      Not for any UI — this project has none. It is the reliable way to pull in
+      WindowsBase, which supplies the Dispatcher used to pump the dedicated STA
+      thread. Without a running pump, COM event subscriptions silently never fire.
+    -->
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
 
 </Project>

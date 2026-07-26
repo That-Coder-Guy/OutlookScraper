@@ -17,8 +17,24 @@ namespace OutlookScraper.Core.Abstractions;
 /// </remarks>
 public interface IMailSource : IAsyncDisposable
 {
-    event EventHandler<RawEmail>? MailArrived;
+    /// <summary>
+    /// Raised with an EntryID as soon as the host reports new mail — deliberately the
+    /// id alone, not the message.
+    /// </summary>
+    /// <remarks>
+    /// Outlook raises its events on its own UI thread, and a slow handler visibly
+    /// freezes the user's Outlook. So the handler reads one property and returns, and
+    /// the worker re-opens the message by id when it is ready to do the expensive work.
+    /// </remarks>
+    event EventHandler<string>? EntryIdArrived;
+
     event EventHandler<MailSourceState>? StateChanged;
+
+    /// <summary>
+    /// Raised after reconnecting, so the host can sweep for whatever arrived while the
+    /// connection was down.
+    /// </summary>
+    event EventHandler? Reconnected;
 
     MailSourceState State { get; }
 
