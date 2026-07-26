@@ -1,0 +1,175 @@
+<Window x:Class="OutlookScraper.App.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:OutlookScraper.App.Views"
+        Title="OutlookScraper — settings"
+        Height="580" Width="720"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <views:StringPresentToVisibilityConverter x:Key="StringPresentToVisibility" />
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,8,0,2" />
+        </Style>
+
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#666" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,0,6" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Margin" Value="0,6,8,0" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TabControl Grid.Row="0">
+
+            <TabItem Header="Ollama">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Server address" />
+                    <TextBox Text="{Binding Settings.Ollama.BaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="Classification model" />
+                    <ComboBox IsEditable="True"
+                              ItemsSource="{Binding AvailableModels}"
+                              Text="{Binding Settings.Ollama.Model, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Content="Refresh model list" HorizontalAlignment="Left"
+                            Command="{Binding RefreshModelsCommand}" />
+
+                    <TextBlock Text="Embedding model (optional)" />
+                    <TextBox Text="{Binding Settings.Ollama.EmbeddingModel, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="{Binding EmbeddingHint}"
+                               Visibility="{Binding EmbeddingHint,
+                                            Converter={StaticResource StringPresentToVisibility}}" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Without an embedding model, blacklist rules still match on
+                                     wording and word order — just not on meaning." />
+
+                    <TextBlock Text="Minimum confidence to notify" />
+                    <ComboBox ItemsSource="{Binding ConfidenceOptions}"
+                              SelectedItem="{Binding ConfidenceChoice}" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Three steps rather than a slider: the model reports confidence
+                                     as low, medium or high, and a finer scale would be false precision." />
+
+                    <TextBlock Text="Request timeout (seconds)" />
+                    <TextBox Text="{Binding Settings.Ollama.RequestTimeoutSeconds}" />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Mail">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Safety-net sweep interval (minutes)" />
+                    <TextBox Text="{Binding Settings.Mail.PollIntervalMinutes}" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Outlook does not raise its new-mail event when more than
+                                     sixteen messages arrive at once, so this periodic sweep is
+                                     what catches listserv bursts. Leave it on." />
+
+                    <TextBlock Text="First-run backfill (days)" />
+                    <TextBox Text="{Binding Settings.Mail.BackfillDays}" />
+
+                    <TextBlock Text="Maximum messages per sweep" />
+                    <TextBox Text="{Binding Settings.Mail.MaxSweepItems}" />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Calendar">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Target calendar" />
+                    <TextBox Text="{Binding Settings.Calendar.CalendarId, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="'primary' is your main calendar. This is a text field because the
+                                     app requests only permission to manage events, not to list your
+                                     calendars — a deliberately narrower grant." />
+
+                    <TextBlock Text="Time zone (IANA)" />
+                    <TextBox Text="{Binding Settings.Calendar.TimeZone, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="Default event length (minutes)" />
+                    <TextBox Text="{Binding Settings.Calendar.DefaultDurationMinutes}" />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Blacklist">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <DataGrid x:Name="RulesGrid" Grid.Row="0" ItemsSource="{Binding BlacklistRules}"
+                              AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Topic" Binding="{Binding TopicTag}" Width="*" />
+                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140" />
+                            <DataGridTextColumn Header="Hidden" Binding="{Binding HitCount}" Width="60" />
+                            <DataGridTextColumn Header="Matching" Binding="{Binding Matching}" Width="100" />
+                            <DataGridTextColumn Header="Added" Binding="{Binding Created}" Width="90" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="1">
+                        <Button Content="Remove selected rule" HorizontalAlignment="Left"
+                                Command="{Binding DeleteRuleCommand}"
+                                CommandParameter="{Binding SelectedItem, ElementName=RulesGrid}" />
+
+                        <TextBlock Text="Test two topic tags" Margin="0,12,0,2" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="Answers 'why was that hidden?' without reading the log." />
+                        <TextBox Text="{Binding TestTagA, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                        <TextBox Text="{Binding TestTagB, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                        <Button Content="Compare" HorizontalAlignment="Left"
+                                Command="{Binding TestTagsCommand}" />
+                        <TextBlock Text="{Binding TagTestResult}" Style="{StaticResource Hint}" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="General">
+                <StackPanel Margin="12">
+                    <CheckBox Content="Start with Windows" IsChecked="{Binding RunAtLogin}"
+                              Margin="0,8" />
+
+                    <TextBlock Text="Maximum notifications per window" />
+                    <TextBox Text="{Binding Settings.General.MaxToastsPerWindow}" />
+
+                    <TextBlock Text="Notification window (minutes)" />
+                    <TextBox Text="{Binding Settings.General.ToastWindowMinutes}" />
+
+                    <TextBlock Text="Keep processed mail for (days)" />
+                    <TextBox Text="{Binding Settings.General.RetentionDays}" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Send test notification"
+                                Command="{Binding SendTestToastCommand}" />
+                        <Button Content="Open logs" Command="{Binding OpenLogsCommand}" />
+                        <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Toast registration for an unpackaged app fails silently when the
+                                     executable moves, so the test button is the way to confirm it." />
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+
+        <DockPanel Grid.Row="1" Margin="0,10,0,0" LastChildFill="False">
+            <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0"
+                       Text="{Binding StatusMessage}" Foreground="#444" />
+            <Button DockPanel.Dock="Right" Content="Save" MinWidth="100" IsDefault="True"
+                    Command="{Binding SaveCommand}" />
+        </DockPanel>
+    </Grid>
+</Window>

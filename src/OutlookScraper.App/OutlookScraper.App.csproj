@@ -4,21 +4,34 @@
     <OutputType>WinExe</OutputType>
 
     <!--
-      10.0.17763.0 (Windows 10 1809) is the floor where the CsWinRT projection and
-      the unpackaged toast compat activator behave. Going lower breaks the WinRT
-      ToastNotification surface that ToastNotificationManagerCompat sits on.
+      The platform version is dictated by CommunityToolkit.WinUI.Notifications 7.1.2.
+      Its assets split like this:
+
+        lib/net5.0-windows10.0.18362  ToastNotificationManagerCompat  present
+        lib/net5.0                    ToastNotificationManagerCompat  MISSING
+
+      Below 10.0.18362 NuGet resolves the plain net5.0 asset, which has the toast
+      builder but not the unpackaged COM activator — so the project would fail to
+      compile the activation path. 19041 (Windows 10 2004) is the usual modern
+      baseline and sits comfortably above the floor.
     -->
-    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
-    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
 
     <UseWPF>true</UseWPF>
     <RootNamespace>OutlookScraper.App</RootNamespace>
     <AssemblyName>OutlookScraper</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>tray.ico</ApplicationIcon>
 
     <!-- Tray app: never flash a console window. -->
     <UseWindowsForms>false</UseWindowsForms>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Embedded so the tray icon works from a single published folder. -->
+    <Resource Include="tray.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../OutlookScraper.Core/OutlookScraper.Core.csproj" />
@@ -34,9 +47,19 @@
     -->
     <PackageReference Include="CommunityToolkit.WinUI.Notifications" Version="7.1.2" />
     <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
+    <!-- SystemIcons/Icon interop for the notification-area handle. Windows-only,
+         which this project already is. -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.11" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+
+    <!--
+      Explicit rather than transitive: DpapiDataStore has to serialize exactly what
+      Google's own FileDataStore does, and that contract is Newtonsoft-based.
+    -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.0" />
   </ItemGroup>
 
 </Project>

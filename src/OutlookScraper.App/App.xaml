@@ -1,0 +1,11 @@
+<Application x:Class="OutlookScraper.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <!--
+      OnExplicitShutdown is required: this is a tray application with no main window,
+      so the default "shut down when the last window closes" would exit the moment the
+      user closed the review window.
+    -->
+    <Application.Resources />
+</Application>
