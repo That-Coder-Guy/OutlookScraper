@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Cross-platform dev harness. This is how prompts, the classification schema and
+    the blacklist thresholds get tuned against real fixture emails without needing
+    Windows or Outlook anywhere in the loop.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>outlookscraper</AssemblyName>
+    <RootNamespace>OutlookScraper.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../OutlookScraper.Core/OutlookScraper.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+
+    <!--
+      10.0.17763.0 (Windows 10 1809) is the floor where the CsWinRT projection and
+      the unpackaged toast compat activator behave. Going lower breaks the WinRT
+      ToastNotification surface that ToastNotificationManagerCompat sits on.
+    -->
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+
+    <UseWPF>true</UseWPF>
+    <RootNamespace>OutlookScraper.App</RootNamespace>
+    <AssemblyName>OutlookScraper</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- Tray app: never flash a console window. -->
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../OutlookScraper.Core/OutlookScraper.Core.csproj" />
+    <ProjectReference Include="../OutlookScraper.Outlook/OutlookScraper.Outlook.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Formally superseded by Microsoft.Windows.AppNotifications (Windows App SDK),
+      but 7.1.2 is what still works for an unpackaged WPF app without dragging in
+      the whole App SDK. All toast construction is isolated behind INotifier so
+      swapping it later is one file.
+    -->
+    <PackageReference Include="CommunityToolkit.WinUI.Notifications" Version="7.1.2" />
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    COM only. No UI, no toasts, no WPF — this project exists purely to turn the
+    Outlook object model into `RawEmail` records, and nothing COM-shaped is allowed
+    to escape past that boundary.
+
+    Excluded from OutlookScraper.Linux.slnf; only the windows-latest CI job and a
+    developer machine ever compile it.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>OutlookScraper.Outlook</RootNamespace>
+
+    <!--
+      NU1701: the interop package only advertises .NET Framework support. It
+      restores and marshals fine under .NET 8 because it is a pure interop
+      assembly, but NuGet warns about the framework mismatch and warnings are
+      errors here.
+    -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../OutlookScraper.Core/OutlookScraper.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The NuGet package rather than a <COMReference>. This matters: the package
+      ships the interop types, so the project compiles on a build agent with no
+      Office installed. A <COMReference> would require Outlook on every CI runner
+      and would leave this project permanently unverified.
+    -->
+    <PackageReference Include="Microsoft.Office.Interop.Outlook" Version="15.0.4797.1004" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WindowsBase supplies the Dispatcher used to pump the dedicated STA thread. -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
+  </ItemGroup>
+
+</Project>

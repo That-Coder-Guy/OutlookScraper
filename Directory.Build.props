@@ -1,0 +1,18 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- ICU is required: EventTimeResolver looks up IANA zone ids, and the Outlook
+         Restrict filter has to format dates in en-US regardless of machine locale. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+
+    <Version>0.1.0</Version>
+    <Authors>That-Coder-Guy</Authors>
+    <Product>OutlookScraper</Product>
+  </PropertyGroup>
+
+</Project>
