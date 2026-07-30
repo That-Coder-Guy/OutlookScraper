@@ -3,6 +3,7 @@
     "path": "OutlookScraper.sln",
     "projects": [
       "src\\OutlookScraper.Core\\OutlookScraper.Core.csproj",
+      "src\\OutlookScraper.Outlook\\OutlookScraper.Outlook.csproj",
       "src\\OutlookScraper.Cli\\OutlookScraper.Cli.csproj",
       "tests\\OutlookScraper.Core.Tests\\OutlookScraper.Core.Tests.csproj"
     ]

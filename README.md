@@ -64,10 +64,11 @@ dotnet test OutlookScraper.Linux.slnf     # 190 tests, runs anywhere
 dotnet build OutlookScraper.sln           # needs Windows
 ```
 
-`OutlookScraper.Linux.slnf` is a solution filter holding Core, the tests and the
-CLI. It exists because WPF cannot build on Linux at all, so CI runs the real test
-suite on `ubuntu-latest` and compiles the Windows projects separately on
-`windows-latest`.
+`OutlookScraper.Linux.slnf` is a solution filter holding everything except the WPF
+shell — Core, the Outlook COM layer, the CLI and the tests. WPF genuinely cannot
+build on Linux, but the COM layer can, because it avoids WPF and needs only the
+Windows targeting pack. So `ubuntu-latest` type-checks nearly the whole codebase and
+`windows-latest` compiles the one project it cannot.
 
 ### Tuning the classifier
 

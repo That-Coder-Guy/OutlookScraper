@@ -18,6 +18,43 @@ internal static class NativeMethods
     /// <summary>Outlook is not currently running (MK_E_UNAVAILABLE).</summary>
     private const int MkEUnavailable = unchecked((int)0x800401E3);
 
+    /// <summary>Win32 <c>MSG</c>. Field order and size must match exactly.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Msg
+    {
+        public IntPtr Hwnd;
+        public uint Message;
+        public IntPtr WParam;
+        public IntPtr LParam;
+        public uint Time;
+        public int PointX;
+        public int PointY;
+    }
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    /// <summary>Returns &gt;0 for a message, 0 for WM_QUIT, -1 on error.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetMessage(out Msg message, IntPtr hWnd, uint filterMin, uint filterMax);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PeekMessage(
+        out Msg message, IntPtr hWnd, uint filterMin, uint filterMax, uint removeMsg);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool TranslateMessage(ref Msg message);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr DispatchMessage(ref Msg message);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostThreadMessage(
+        uint threadId, uint message, IntPtr wParam, IntPtr lParam);
+
     [DllImport("ole32.dll", PreserveSig = false)]
     private static extern void CLSIDFromProgID(
         [MarshalAs(UnmanagedType.LPWStr)] string progId, out Guid clsid);

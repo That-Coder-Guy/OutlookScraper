@@ -2,7 +2,11 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.Logging;
 using OutlookScraper.Core.Models;
-using Outlook = Microsoft.Office.Interop.Outlook;
+// Aliased as `Interop`, deliberately not as `Outlook`. This project's own
+// namespace is OutlookScraper.Outlook, so an alias named `Outlook` loses to the
+// enclosing namespace: `Outlook.MailItem` resolves to OutlookScraper.Outlook.MailItem,
+// which does not exist. Renaming the alias is the fix.
+using Interop = Microsoft.Office.Interop.Outlook;
 
 namespace OutlookScraper.Outlook;
 
@@ -24,16 +28,16 @@ internal sealed class OutlookConnection(ILogger? logger = null)
 {
     private readonly ILogger? _logger = logger;
 
-    private Outlook.Application? _application;
-    private Outlook.NameSpace? _session;
+    private Interop.Application? _application;
+    private Interop.NameSpace? _session;
 
     // Held for the lifetime of the connection. See the class remarks.
-    private readonly List<Outlook.MAPIFolder> _folders = [];
-    private readonly List<Outlook.Items> _items = [];
-    private readonly List<Outlook.ItemsEvents_ItemAddEventHandler> _itemAddHandlers = [];
+    private readonly List<Interop.MAPIFolder> _folders = [];
+    private readonly List<Interop.Items> _items = [];
+    private readonly List<Interop.ItemsEvents_ItemAddEventHandler> _itemAddHandlers = [];
 
-    private Outlook.ApplicationEvents_11_NewMailExEventHandler? _newMailHandler;
-    private Outlook.ApplicationEvents_11_QuitEventHandler? _quitHandler;
+    private Interop.ApplicationEvents_11_NewMailExEventHandler? _newMailHandler;
+    private Interop.ApplicationEvents_11_QuitEventHandler? _quitHandler;
 
     public bool IsConnected => _application is not null;
 
@@ -49,7 +53,7 @@ internal sealed class OutlookConnection(ILogger? logger = null)
     /// </summary>
     public bool TryConnect(IReadOnlyList<string> watchedFolders)
     {
-        if (NativeMethods.TryGetRunningOutlook() is not Outlook.Application application)
+        if (NativeMethods.TryGetRunningOutlook() is not Interop.Application application)
         {
             return false;
         }
@@ -67,15 +71,19 @@ internal sealed class OutlookConnection(ILogger? logger = null)
         return true;
     }
 
-    private void SubscribeQuit(Outlook.Application application)
+    private void SubscribeQuit(Interop.Application application)
     {
         // Sinking Quit gives a clean teardown before the RPC channel dies, which is far
         // nicer than discovering it through an RPC_E_DISCONNECTED storm.
         _quitHandler = () => HostQuitting?.Invoke();
-        application.Quit += _quitHandler;
+
+        // Application.Quit is BOTH a method and an event on the interop type, so a
+        // bare `application.Quit +=` binds to the method group and will not compile.
+        // The cast to the event interface disambiguates it.
+        ((Interop.ApplicationEvents_11_Event)application).Quit += _quitHandler;
     }
 
-    private void SubscribeNewMailEx(Outlook.Application application)
+    private void SubscribeNewMailEx(Interop.Application application)
     {
         // Cheap redundancy for the default inbox. The payload is a space-delimited list
         // of EntryIDs rather than the items themselves.
@@ -101,13 +109,13 @@ internal sealed class OutlookConnection(ILogger? logger = null)
 
             // The delegate is held too — an anonymous handler that goes out of scope is
             // just as collectable as the Items wrapper.
-            Outlook.ItemsEvents_ItemAddEventHandler handler = OnItemAdd;
+            Interop.ItemsEvents_ItemAddEventHandler handler = OnItemAdd;
             _itemAddHandlers.Add(handler);
             items.ItemAdd += handler;
         }
     }
 
-    private IEnumerable<Outlook.MAPIFolder> ResolveFolders(IReadOnlyList<string> watchedFolders)
+    private IEnumerable<Interop.MAPIFolder> ResolveFolders(IReadOnlyList<string> watchedFolders)
     {
         if (_session is null)
         {
@@ -116,13 +124,13 @@ internal sealed class OutlookConnection(ILogger? logger = null)
 
         if (watchedFolders.Count == 0)
         {
-            yield return _session.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderInbox);
+            yield return _session.GetDefaultFolder(Interop.OlDefaultFolders.olFolderInbox);
             yield break;
         }
 
         foreach (var name in watchedFolders)
         {
-            Outlook.MAPIFolder? resolved = null;
+            Interop.MAPIFolder? resolved = null;
 
             try
             {
@@ -141,9 +149,9 @@ internal sealed class OutlookConnection(ILogger? logger = null)
     }
 
     /// <summary>Resolves a backslash-separated path beneath the default inbox's store.</summary>
-    private Outlook.MAPIFolder? ResolveByPath(string path)
+    private Interop.MAPIFolder? ResolveByPath(string path)
     {
-        var inbox = _session!.GetDefaultFolder(Outlook.OlDefaultFolders.olFolderInbox);
+        var inbox = _session!.GetDefaultFolder(Interop.OlDefaultFolders.olFolderInbox);
 
         if (string.IsNullOrWhiteSpace(path) ||
             path.Equals("Inbox", StringComparison.OrdinalIgnoreCase))
@@ -151,7 +159,7 @@ internal sealed class OutlookConnection(ILogger? logger = null)
             return inbox;
         }
 
-        Outlook.MAPIFolder current = inbox;
+        Interop.MAPIFolder current = inbox;
 
         foreach (var segment in path.Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -175,7 +183,7 @@ internal sealed class OutlookConnection(ILogger? logger = null)
         try
         {
             // Calendar items, tasks and reports land in inboxes too.
-            if (item is not Outlook.MailItem mail)
+            if (item is not Interop.MailItem mail)
             {
                 return;
             }
@@ -207,7 +215,7 @@ internal sealed class OutlookConnection(ILogger? logger = null)
         {
             var item = scope.Track(_session.GetItemFromID(entryId));
 
-            if (item is not Outlook.MailItem mail)
+            if (item is not Interop.MailItem mail)
             {
                 return null;
             }
@@ -241,17 +249,19 @@ internal sealed class OutlookConnection(ILogger? logger = null)
     }
 
     private void SweepFolder(
-        Outlook.MAPIFolder folder, DateTimeOffset sinceLocal, int max, List<RawEmail> results)
+        Interop.MAPIFolder folder, DateTimeOffset sinceLocal, int max, List<RawEmail> results)
     {
         using var scope = new ComScope();
 
         try
         {
-            var items = scope.Track(folder.Items);
+            // Items and Restrict never return null for a live folder; a failure surfaces
+            // as the COMException caught below instead.
+            var items = scope.Track(folder.Items)!;
             items.Sort("[ReceivedTime]", Descending: true);
 
             var filtered = scope.Track(
-                items.Restrict(RestrictFilterBuilder.ReceivedSinceWithOverlap(sinceLocal)));
+                items.Restrict(RestrictFilterBuilder.ReceivedSinceWithOverlap(sinceLocal)))!;
 
             var folderName = folder.Name;
 
@@ -261,7 +271,7 @@ internal sealed class OutlookConnection(ILogger? logger = null)
             {
                 var entry = scope.Track(filtered[i]);
 
-                if (entry is Outlook.MailItem mail)
+                if (entry is Interop.MailItem mail)
                 {
                     results.Add(MailItemMapper.Map(mail, folderName));
                 }
@@ -273,11 +283,11 @@ internal sealed class OutlookConnection(ILogger? logger = null)
         }
     }
 
-    private static string FolderNameOf(Outlook.MailItem mail, ComScope scope)
+    private static string FolderNameOf(Interop.MailItem mail, ComScope scope)
     {
         try
         {
-            return scope.Track(mail.Parent as Outlook.MAPIFolder)?.Name ?? "";
+            return scope.Track(mail.Parent as Interop.MAPIFolder)?.Name ?? "";
         }
         catch (COMException)
         {
@@ -323,7 +333,7 @@ internal sealed class OutlookConnection(ILogger? logger = null)
 
                 if (_quitHandler is not null)
                 {
-                    _application.Quit -= _quitHandler;
+                    ((Interop.ApplicationEvents_11_Event)_application).Quit -= _quitHandler;
                 }
             }
             catch (COMException)
