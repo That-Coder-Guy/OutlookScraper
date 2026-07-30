@@ -15,4 +15,19 @@
     <Product>OutlookScraper</Product>
   </PropertyGroup>
 
+  <!--
+    Lets a non-Windows machine *restore* the Windows-targeted projects. Building them
+    still requires Windows — WPF cannot compile here — but restore is enough to catch
+    package-resolution problems (NU1605 downgrades, NU1701 framework fallbacks) without
+    a round trip through CI. Exactly that class of bug broke the first windows-latest
+    build, and it is reproducible locally with:
+
+        dotnet restore OutlookScraper.sln
+
+    No effect on Windows.
+  -->
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
 </Project>
