@@ -46,20 +46,38 @@
       swapping it later is one file.
     -->
     <PackageReference Include="CommunityToolkit.WinUI.Notifications" Version="7.1.2" />
-    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
+
+    <!--
+      PINNED BELOW LATEST ON PURPOSE — do not bump to 2.4.x without checking assets.
+      2.4.1 ships only `net10.0-windows7.0` and `net462`, so a .NET 8 project silently
+      falls back to the .NET *Framework* build of a WPF control library. 2.3.2 is the
+      newest release carrying a real `net8.0-windows7.0` asset.
+    -->
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.3.2" />
+
     <!-- SystemIcons/Icon interop for the notification-area handle. Windows-only,
-         which this project already is. -->
-    <PackageReference Include="System.Drawing.Common" Version="8.0.11" />
+         which this project already is. 9.0.1 is the floor required by
+         H.GeneratedIcons.System.Drawing, which H.NotifyIcon pulls in. -->
+    <PackageReference Include="System.Drawing.Common" Version="9.0.1" />
+
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
 
     <!--
       Explicit rather than transitive: DpapiDataStore has to serialize exactly what
       Google's own FileDataStore does, and that contract is Newtonsoft-based.
+      13.0.4 is the floor required by Google.Apis.Core.
     -->
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-    <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.0" />
+
+    <!--
+      Held at 8.x deliberately. 9.0.0 requires Microsoft.Extensions.Logging 9.0.0,
+      which would drag the whole Microsoft.Extensions graph a framework generation
+      ahead of this net8.0 app for no benefit.
+    -->
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
