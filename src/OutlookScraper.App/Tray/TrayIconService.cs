@@ -1,6 +1,5 @@
 using System.Drawing;
 using System.IO;
-using System.Runtime.Versioning;
 using System.Windows;
 using H.NotifyIcon.Core;
 using OutlookScraper.Core.Models;
@@ -16,7 +15,11 @@ namespace OutlookScraper.App.Tray;
 /// recoverable states, and the user needs to be able to see which one they are in
 /// without opening anything.
 /// </remarks>
-[SupportedOSPlatform("windows")]
+// Deliberately no [SupportedOSPlatform("windows")] here. That attribute would widen
+// this type's claim to *every* Windows version, while the tray APIs declare support
+// from 5.1.2600 — and the platform analyzer rejects a call site that promises more
+// than the API guarantees. Without it the type inherits windows10.0.19041.0 from the
+// project's TFM, which satisfies them and tracks the TFM automatically.
 public sealed class TrayIconService : IDisposable
 {
     private readonly TrayIconWithContextMenu _icon;
