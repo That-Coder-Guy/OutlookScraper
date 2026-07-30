@@ -1,7 +1,11 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using OutlookScraper.Core.Models;
-using Outlook = Microsoft.Office.Interop.Outlook;
+// Aliased as `Interop`, deliberately not as `Outlook`. This project's own
+// namespace is OutlookScraper.Outlook, so an alias named `Outlook` loses to the
+// enclosing namespace: `Outlook.MailItem` resolves to OutlookScraper.Outlook.MailItem,
+// which does not exist. Renaming the alias is the fix.
+using Interop = Microsoft.Office.Interop.Outlook;
 
 namespace OutlookScraper.Outlook;
 
@@ -20,7 +24,7 @@ internal static class MailItemMapper
     private const string TransportHeadersSchema =
         "http://schemas.microsoft.com/mapi/proptag/0x007D001E";
 
-    public static RawEmail Map(Outlook.MailItem item, string folderName)
+    public static RawEmail Map(Interop.MailItem item, string folderName)
     {
         using var scope = new ComScope();
 
@@ -44,7 +48,7 @@ internal static class MailItemMapper
     /// Exchange senders come back as an opaque X.400 style address, so the SMTP address
     /// has to be pulled off the <c>ExchangeUser</c> behind the sender.
     /// </summary>
-    private static string ResolveSenderAddress(Outlook.MailItem item, ComScope scope)
+    private static string ResolveSenderAddress(Interop.MailItem item, ComScope scope)
     {
         var smtp = Safe(() => item.SenderEmailAddress) ?? "";
         var type = Safe(() => item.SenderEmailType) ?? "";
@@ -74,11 +78,11 @@ internal static class MailItemMapper
         }
     }
 
-    private static string ResolveStoreId(Outlook.MailItem item, ComScope scope)
+    private static string ResolveStoreId(Interop.MailItem item, ComScope scope)
     {
         try
         {
-            var parent = scope.Track(item.Parent as Outlook.MAPIFolder);
+            var parent = scope.Track(item.Parent as Interop.MAPIFolder);
             var store = parent is null ? null : scope.Track(parent.Store);
 
             return store?.StoreID ?? "";
@@ -89,14 +93,16 @@ internal static class MailItemMapper
         }
     }
 
-    private static DateTimeOffset ResolveReceivedTime(Outlook.MailItem item)
+    private static DateTimeOffset ResolveReceivedTime(Interop.MailItem item)
     {
-        var received = Safe(() => item.ReceivedTime);
+        // Explicit DateTime? — Safe<T> infers T = DateTime otherwise, and a missing
+        // value would silently arrive as DateTime.MinValue rather than null.
+        var received = Safe<DateTime?>(() => item.ReceivedTime);
 
         // Unsent or draft items have no received time and come back as a sentinel.
         if (received is null || received.Value.Year < 1900)
         {
-            received = Safe(() => item.CreationTime) ?? DateTime.Now;
+            received = Safe<DateTime?>(() => item.CreationTime) ?? DateTime.Now;
         }
 
         return new DateTimeOffset(
@@ -108,7 +114,7 @@ internal static class MailItemMapper
     /// Out-of-office replies and bounces are never event announcements, and filtering
     /// them here saves the model a pointless call.
     /// </summary>
-    private static bool IsAutoReply(Outlook.MailItem item, ComScope scope)
+    private static bool IsAutoReply(Interop.MailItem item, ComScope scope)
     {
         var messageClass = Safe(() => item.MessageClass) ?? "";
 

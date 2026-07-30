@@ -20,8 +20,15 @@ internal sealed class ComScope : IDisposable
 {
     private readonly List<object> _tracked = [];
 
-    /// <summary>Registers an object for release and returns it, so calls can be nested.</summary>
-    public T Track<T>(T comObject) where T : class
+    /// <summary>
+    /// Registers an object for release and returns it, so calls can be nested.
+    /// </summary>
+    /// <remarks>
+    /// Accepts and returns a nullable reference on purpose. Several of these come from
+    /// `as` casts or interop members that can genuinely be null, and forcing a
+    /// non-nullable parameter would just push `!` out to every call site.
+    /// </remarks>
+    public T? Track<T>(T? comObject) where T : class
     {
         if (comObject is not null)
         {

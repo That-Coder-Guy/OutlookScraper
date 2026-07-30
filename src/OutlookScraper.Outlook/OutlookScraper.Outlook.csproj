@@ -35,13 +35,12 @@
     <PackageReference Include="Microsoft.Office.Interop.Outlook" Version="15.0.4797.1004" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <!--
-      Not for any UI — this project has none. It is the reliable way to pull in
-      WindowsBase, which supplies the Dispatcher used to pump the dedicated STA
-      thread. Without a running pump, COM event subscriptions silently never fire.
-    -->
-    <UseWPF>true</UseWPF>
-  </PropertyGroup>
+  <!--
+    Deliberately NOT UseWPF. This project has no UI, and the STA message pump is a raw
+    Win32 GetMessage loop rather than WPF's Dispatcher (which is the same thing
+    underneath). Avoiding WPF keeps the project buildable wherever the Windows targeting
+    pack is available, instead of requiring a Windows host — so the COM layer is
+    type-checked on every push rather than only on the Windows CI runner.
+  -->
 
 </Project>

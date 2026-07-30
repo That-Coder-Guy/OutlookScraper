@@ -1,31 +1,47 @@
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Windows.Threading;
 
 namespace OutlookScraper.Outlook;
 
 /// <summary>
-/// A dedicated single-threaded-apartment thread running a real message pump, on which
+/// A dedicated single-threaded-apartment thread running a Win32 message pump, on which
 /// all Outlook COM work happens.
 /// </summary>
 /// <remarks>
 /// Two things make this necessary rather than merely tidy:
 ///
-/// COM events are delivered as window messages to the apartment that created the
-/// proxy. Without a running pump the subscriptions appear to succeed and then simply
-/// never fire — no error, no exception, just silence.
+/// COM delivers calls into an STA as window messages. Without a thread running a message
+/// loop, event subscriptions appear to succeed and then simply never fire — no error, no
+/// exception, just silence. Pumping is the whole job of this class.
 ///
-/// And it is deliberately *not* the WPF UI thread. Reading <c>MailItem.Body</c> on a
-/// cold item can block for a noticeable time, and that must never freeze the window.
-/// It also means Outlook connectivity is independent of whether any window is open.
+/// And it is deliberately not the WPF UI thread. Reading <c>MailItem.Body</c> on a cold
+/// item can block noticeably, and that must never freeze the window. It also means
+/// Outlook connectivity is independent of whether any window is open.
+///
+/// This is a raw <c>GetMessage</c> loop rather than WPF's <c>Dispatcher.Run()</c>, which
+/// does the same thing underneath. Using it directly keeps this assembly free of WPF, so
+/// the COM layer compiles anywhere the Windows targeting pack is available instead of
+/// requiring a Windows host — which is what lets CI and a Linux dev box type-check it.
 /// </remarks>
 [SupportedOSPlatform("windows")]
 public sealed class OutlookStaThread : IAsyncDisposable
 {
     private readonly Thread _thread;
+    private readonly ConcurrentQueue<Action> _work = new();
+
     private readonly TaskCompletionSource _ready =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private Dispatcher? _dispatcher;
+    private uint _threadId;
+    private volatile bool _disposed;
+
+    /// <summary>Private message asking the pump to drain the work queue.</summary>
+    private const uint WmRunWork = WmApp + 1;
+
+    private const uint WmApp = 0x8000;
+    private const uint WmQuit = 0x0012;
+    private const uint PmNoRemove = 0x0000;
 
     public OutlookStaThread()
     {
@@ -45,11 +61,38 @@ public sealed class OutlookStaThread : IAsyncDisposable
 
     private void Pump()
     {
-        _dispatcher = Dispatcher.CurrentDispatcher;
+        _threadId = NativeMethods.GetCurrentThreadId();
+
+        // A thread has no message queue until it first asks for one. Forcing creation
+        // here means a PostThreadMessage that races startup cannot be silently dropped.
+        NativeMethods.PeekMessage(out _, IntPtr.Zero, 0, 0, PmNoRemove);
+
         _ready.SetResult();
 
-        // Blocks until InvokeShutdown. This is the pump COM events arrive on.
-        Dispatcher.Run();
+        // GetMessage returns 0 on WM_QUIT and -1 on error; both end the loop.
+        while (NativeMethods.GetMessage(out var message, IntPtr.Zero, 0, 0) > 0)
+        {
+            if (message.Message == WmRunWork)
+            {
+                DrainWork();
+                continue;
+            }
+
+            NativeMethods.TranslateMessage(ref message);
+            NativeMethods.DispatchMessage(ref message);
+        }
+
+        // Anything queued between the quit request and the loop exiting still needs to
+        // run, or its awaiting task never completes.
+        DrainWork();
+    }
+
+    private void DrainWork()
+    {
+        while (_work.TryDequeue(out var action))
+        {
+            action();
+        }
     }
 
     public Task ReadyAsync() => _ready.Task;
@@ -57,34 +100,82 @@ public sealed class OutlookStaThread : IAsyncDisposable
     public async Task<T> InvokeAsync<T>(Func<T> work)
     {
         await _ready.Task;
-        return await _dispatcher!.InvokeAsync(work).Task;
+
+        var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Enqueue(() =>
+        {
+            try
+            {
+                completion.SetResult(work());
+            }
+            catch (Exception ex)
+            {
+                completion.SetException(ex);
+            }
+        });
+
+        return await completion.Task;
     }
 
     public async Task InvokeAsync(Action work)
     {
         await _ready.Task;
-        await _dispatcher!.InvokeAsync(work).Task;
+
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Enqueue(() =>
+        {
+            try
+            {
+                work();
+                completion.SetResult();
+            }
+            catch (Exception ex)
+            {
+                completion.SetException(ex);
+            }
+        });
+
+        await completion.Task;
     }
 
     /// <summary>Fire-and-forget, for COM event handlers that must return immediately.</summary>
-    public void Post(Action work) => _dispatcher?.BeginInvoke(work);
-
-    public async ValueTask DisposeAsync()
+    public void Post(Action work)
     {
-        if (_dispatcher is null)
+        if (!_ready.Task.IsCompleted || _disposed)
         {
             return;
         }
 
-        _dispatcher.InvokeShutdown();
+        Enqueue(work);
+    }
 
-        await Task.Run(() =>
+    private void Enqueue(Action work)
+    {
+        _work.Enqueue(work);
+
+        // Wake the pump. If this fails the thread is gone, and the queued item will be
+        // picked up by the final drain (or never, if we are already shutting down).
+        NativeMethods.PostThreadMessage(_threadId, WmRunWork, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
         {
-            if (!_thread.Join(TimeSpan.FromSeconds(5)))
-            {
-                // The pump is wedged inside a COM call. Nothing safe left to do; the
-                // process is exiting anyway.
-            }
-        });
+            return;
+        }
+
+        _disposed = true;
+
+        if (!_ready.Task.IsCompleted)
+        {
+            return;
+        }
+
+        NativeMethods.PostThreadMessage(_threadId, WmQuit, IntPtr.Zero, IntPtr.Zero);
+
+        await Task.Run(() => _thread.Join(TimeSpan.FromSeconds(5)));
     }
 }

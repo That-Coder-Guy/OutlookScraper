@@ -6,9 +6,9 @@ on:
   pull_request:
 
 jobs:
-  # Builds and tests everything that matters. Core holds all the logic, so this is
-  # where the real coverage is — and it runs on Linux because Core deliberately has
-  # no Windows dependencies.
+  # Builds and tests everything except the WPF shell. Core holds all the logic, and
+  # the Outlook COM layer type-checks here too — it avoids WPF entirely, so it needs
+  # only the Windows targeting pack rather than a Windows host.
   core:
     runs-on: ubuntu-latest
     steps:
