@@ -146,6 +146,46 @@ public sealed class ProcessedMessageRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ReportsNoFailuresWhenNothingHasFailed()
+    {
+        await _repository.TryBeginAsync(TestData.Email(entryId: "A"));
+        await _repository.MarkClassifiedAsync("A", "h", "m", null, DateTimeOffset.UtcNow);
+
+        var summary = await _repository.GetFailureSummaryAsync();
+
+        summary.Any.Should().BeFalse();
+        summary.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ReportsFailureCountAndTheMostRecentReason()
+    {
+        // Drives the review window's empty state, which otherwise claims "nothing
+        // waiting" when in fact everything failed.
+        await _repository.TryBeginAsync(TestData.Email(entryId: "A"));
+        await _repository.MarkFailedAsync("A", "connection refused");
+
+        await _repository.TryBeginAsync(TestData.Email(entryId: "B"));
+        await _repository.MarkFailedAsync("B", "Ollama does not have the model 'llama3.1:8b'");
+
+        var summary = await _repository.GetFailureSummaryAsync();
+
+        summary.Any.Should().BeTrue();
+        summary.Count.Should().Be(2);
+        summary.LastError.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task ExcludesRecoveredMessagesFromTheFailureCount()
+    {
+        await _repository.TryBeginAsync(TestData.Email(entryId: "A"));
+        await _repository.MarkFailedAsync("A", "boom");
+        await _repository.MarkClassifiedAsync("A", "h", "m", null, DateTimeOffset.UtcNow);
+
+        (await _repository.GetFailureSummaryAsync()).Count.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ListsFailedMessagesUnderTheAttemptCap()
     {
         await _repository.TryBeginAsync(TestData.Email(entryId: "A"));

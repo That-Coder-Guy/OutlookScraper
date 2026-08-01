@@ -3,6 +3,12 @@ using OutlookScraper.Core.Models;
 
 namespace OutlookScraper.Core.Storage;
 
+/// <summary>Count of messages that failed to classify, plus the most recent reason.</summary>
+public sealed record FailureSummary(int Count, string? LastError)
+{
+    public bool Any => Count > 0;
+}
+
 /// <summary>
 /// Dedup and per-message state. <see cref="TryBeginAsync"/> is the gate that makes
 /// the three redundant mail-delivery paths safe.
@@ -149,6 +155,42 @@ public sealed class ProcessedMessageRepository(Database database)
             """,
             new { entryId, status = nameof(ProcessedStatus.Failed), error },
             cancellationToken: ct));
+    }
+
+    /// <summary>
+    /// How many messages failed to classify, and why the most recent one did.
+    /// </summary>
+    /// <remarks>
+    /// Exists so the review window can explain an empty list. Without it the UI says
+    /// "nothing waiting" whether the inbox was genuinely uninteresting or every single
+    /// message failed — which is exactly the case where the user most needs to be told
+    /// something, and the one where silence is most misleading.
+    /// </remarks>
+    public async Task<FailureSummary> GetFailureSummaryAsync(CancellationToken ct = default)
+    {
+        using var connection = _database.Open();
+
+        // Read as scalars rather than materializing a record: SQLite's COUNT returns
+        // INTEGER (Int64), which will not bind to an `int` constructor parameter.
+        var count = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT COUNT(1) FROM ProcessedMessages WHERE Status = 'Failed';",
+            cancellationToken: ct));
+
+        if (count == 0)
+        {
+            return new FailureSummary(0, null);
+        }
+
+        var lastError = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            """
+            SELECT LastError FROM ProcessedMessages
+            WHERE Status = 'Failed' AND LastError IS NOT NULL
+            ORDER BY ReceivedUtc DESC
+            LIMIT 1;
+            """,
+            cancellationToken: ct));
+
+        return new FailureSummary((int)count, lastError);
     }
 
     /// <summary>Backs a "retry failed messages" command in the tray menu.</summary>
