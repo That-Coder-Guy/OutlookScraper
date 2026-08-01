@@ -63,7 +63,7 @@ public sealed class OllamaClient(HttpClient httpClient)
         }
 
         using var response = await _httpClient.PostAsJsonAsync("/api/chat", request, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, model, ct);
 
         var payload = await response.Content.ReadFromJsonAsync<ChatResponse>(JsonOptions, ct)
                       ?? throw new OllamaException("Ollama returned an empty chat response.");
@@ -82,11 +82,57 @@ public sealed class OllamaClient(HttpClient httpClient)
         };
 
         using var response = await _httpClient.PostAsJsonAsync("/api/embed", request, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, model, ct);
 
         var payload = await response.Content.ReadFromJsonAsync<EmbedResponse>(JsonOptions, ct);
 
         return payload?.Embeddings is { Count: > 0 } embeddings ? embeddings[0] : null;
+    }
+
+    /// <summary>
+    /// Turns a failed response into an exception that names the actual problem.
+    /// </summary>
+    /// <remarks>
+    /// Ollama answers a request for a model it does not have with a bare 404, and
+    /// <c>EnsureSuccessStatusCode</c> renders that as "Response status code does not
+    /// indicate success: 404 (Not Found)" — which tells the user nothing, even though
+    /// the fix is a single command. The model name is known here, so the message may as
+    /// well contain the command that resolves it.
+    /// </remarks>
+    private static async Task EnsureSuccessAsync(
+        HttpResponseMessage response, string model, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await SafeReadAsync(response, ct);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new OllamaException(
+                $"Ollama does not have the model '{model}'. Install it with:  ollama pull {model}" +
+                (string.IsNullOrWhiteSpace(body) ? "" : $"  (server said: {body})"));
+        }
+
+        throw new OllamaException(
+            $"Ollama returned {(int)response.StatusCode} ({response.ReasonPhrase}) for model '{model}'." +
+            (string.IsNullOrWhiteSpace(body) ? "" : $" {body}"));
+    }
+
+    /// <summary>Reads the error body for context; never masks the original failure.</summary>
+    private static async Task<string> SafeReadAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var body = (await response.Content.ReadAsStringAsync(ct)).Trim();
+            return body.Length > 300 ? body[..300] : body;
+        }
+        catch (Exception)
+        {
+            return "";
+        }
     }
 
     /// <summary>Locally installed models. Also doubles as the health probe.</summary>

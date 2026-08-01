@@ -119,7 +119,38 @@ public sealed class OllamaClientTests
         var act = async () => await client.ChatAsync(
             "m", "s", "u", null, "10m", 8192, CancellationToken.None);
 
-        await act.Should().ThrowAsync<HttpRequestException>();
+        (await act.Should().ThrowAsync<OllamaException>())
+            .Which.Message.Should().Contain("500");
+    }
+
+    [Fact]
+    public async Task A404NamesTheModelAndThePullCommand()
+    {
+        // Ollama answers a request for a model it does not have with a bare 404. The
+        // raw status line tells the user nothing, even though one command fixes it.
+        var (client, handler) = Create("{\"error\":\"model 'llama3.1:8b' not found\"}");
+        handler.StatusCode = HttpStatusCode.NotFound;
+
+        var act = async () => await client.ChatAsync(
+            "llama3.1:8b", "s", "u", null, "10m", 8192, CancellationToken.None);
+
+        var message = (await act.Should().ThrowAsync<OllamaException>()).Which.Message;
+
+        message.Should().Contain("llama3.1:8b");
+        message.Should().Contain("ollama pull llama3.1:8b");
+    }
+
+    [Fact]
+    public async Task EmbeddingAlsoReportsAMissingModelClearly()
+    {
+        var (client, handler) = Create("{\"error\":\"model not found\"}");
+        handler.StatusCode = HttpStatusCode.NotFound;
+
+        var act = async () => await client.EmbedAsync(
+            "nomic-embed-text", "text", CancellationToken.None);
+
+        (await act.Should().ThrowAsync<OllamaException>())
+            .Which.Message.Should().Contain("ollama pull nomic-embed-text");
     }
 }
 
