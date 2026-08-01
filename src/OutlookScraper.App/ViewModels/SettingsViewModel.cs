@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.Versioning;
 using System.Windows.Input;
+using OutlookScraper.App.Logging;
 using OutlookScraper.App.Notifications;
 using OutlookScraper.App.Startup;
 using OutlookScraper.Core.Abstractions;
@@ -182,6 +183,27 @@ public sealed class SettingsViewModel : ObservableObject
             Settings.General.RunAtLogin = value;
             _runAtLogin.SetEnabled(value);
             OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// Applied immediately rather than on Save, and deliberately so: the reason to reach
+    /// for this checkbox is that mail is being mishandled right now, and the next arrival
+    /// is the one worth capturing. Save still persists it for the next run.
+    /// </summary>
+    public bool VerboseLogging
+    {
+        get => Settings.General.VerboseLogging;
+        set
+        {
+            Settings.General.VerboseLogging = value;
+            SerilogSetup.SetVerbose(value);
+            OnPropertyChanged();
+
+            StatusMessage = value
+                ? "Verbose logging is on — every message now logs its body size, the "
+                  + "model's reasoning and the queue depth."
+                : "Verbose logging is off. Per-message outcomes are still logged.";
         }
     }
 

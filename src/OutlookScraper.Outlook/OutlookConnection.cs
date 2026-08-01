@@ -91,7 +91,9 @@ internal sealed class OutlookConnection(ILogger? logger = null)
         {
             foreach (var entryId in entryIds.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
-                EntryIdArrived?.Invoke(entryId.Trim());
+                var id = entryId.Trim();
+                _logger?.LogInformation("NewMailEx fired for [{Id}].", Tail(id));
+                EntryIdArrived?.Invoke(id);
             }
         };
 
@@ -112,6 +114,9 @@ internal sealed class OutlookConnection(ILogger? logger = null)
             Interop.ItemsEvents_ItemAddEventHandler handler = OnItemAdd;
             _itemAddHandlers.Add(handler);
             items.ItemAdd += handler;
+
+            _logger?.LogInformation(
+                "Subscribed to ItemAdd on '{Folder}' ({Count} items).", folder.Name, items.Count);
         }
     }
 
@@ -185,10 +190,18 @@ internal sealed class OutlookConnection(ILogger? logger = null)
             // Calendar items, tasks and reports land in inboxes too.
             if (item is not Interop.MailItem mail)
             {
+                _logger?.LogDebug("ItemAdd fired for a non-mail item; ignoring.");
                 return;
             }
 
             var entryId = mail.EntryID;
+
+            // The lowest-latency path, and the one that proves live delivery works at
+            // all. Logged at Information precisely because its silent failure — a
+            // garbage-collected event sink — is otherwise indistinguishable from an
+            // idle mailbox.
+            _logger?.LogInformation("ItemAdd fired for [{Id}].", Tail(entryId));
+
             EntryIdArrived?.Invoke(entryId);
         }
         catch (COMException ex)
@@ -294,6 +307,11 @@ internal sealed class OutlookConnection(ILogger? logger = null)
             return "";
         }
     }
+
+    /// <summary>Last 10 characters of an EntryID — enough to correlate, short enough to read.</summary>
+    private static string Tail(string entryId) =>
+        string.IsNullOrEmpty(entryId) ? "?" :
+        entryId.Length <= 10 ? entryId : entryId[^10..];
 
     /// <summary>Cheap liveness probe. Throws if the RPC channel is gone.</summary>
     public void Probe() => _ = _application?.Version;

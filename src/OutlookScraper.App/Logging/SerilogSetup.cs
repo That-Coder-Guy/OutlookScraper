@@ -1,6 +1,8 @@
 using System.IO;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using Serilog.Extensions.Logging;
 
 namespace OutlookScraper.App.Logging;
@@ -15,12 +17,24 @@ namespace OutlookScraper.App.Logging;
 /// </remarks>
 public static class SerilogSetup
 {
-    public static ILoggerFactory Create(string logDirectory)
+    /// <summary>
+    /// The live minimum level. A switch rather than a fixed <c>MinimumLevel</c> because
+    /// verbose logging is most wanted precisely when something is already going wrong,
+    /// and demanding a restart to turn it on would lose the very arrivals being chased.
+    /// </summary>
+    private static readonly LoggingLevelSwitch LevelSwitch = new(LogEventLevel.Information);
+
+    /// <summary>Takes effect on the next log call — no restart, no re-created factory.</summary>
+    public static void SetVerbose(bool verbose) =>
+        LevelSwitch.MinimumLevel = verbose ? LogEventLevel.Debug : LogEventLevel.Information;
+
+    public static ILoggerFactory Create(string logDirectory, bool verbose = false)
     {
         Directory.CreateDirectory(logDirectory);
+        SetVerbose(verbose);
 
         Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
+            .MinimumLevel.ControlledBy(LevelSwitch)
             .WriteTo.File(
                 Path.Combine(logDirectory, "outlookscraper-.log"),
                 rollingInterval: RollingInterval.Day,

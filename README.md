@@ -156,3 +156,38 @@ added later, but that is the whole extent of the hedge — none of it is built.
   notification" button.
 - Logs are in `%LOCALAPPDATA%\OutlookScraper\logs\`. Settings are a hand-editable
   `settings.json` in the same folder.
+
+## Following a message through the log
+
+Every message is logged under the last ten characters of its Outlook EntryID, so
+one `Ctrl+F` on that id gives the whole story of a single email:
+
+```
+[A1B2C3D4E5] processing 'Free pizza at the SEC tonight' from acm@example.edu, received 2026-08-01 16:12.
+[A1B2C3D4E5] classified in 3.4s: event=True freeFood=True confidence=High category=food tag='free pizza study break'.
+[A1B2C3D4E5] FREE FOOD EVENT: 'Free pizza at the SEC tonight' — added to the pending list.
+[A1B2C3D4E5] toast shown.
+```
+
+Each of the ways a message can end is spelled out rather than summarised, because
+"nothing showed up" has half a dozen ordinary causes and they are not
+distinguishable from each other after the fact:
+
+| Line | What it means |
+|---|---|
+| `skipped: auto-reply`, `body too short`, `not a mail item` | Filtered before the model was asked |
+| `skipped: identical body already classified as [...]` | A listserv resend, reusing the earlier verdict |
+| `not a free-food event (not an event / food is not free / confidence … below …)` | The model was asked and said no — and which of the three conditions failed |
+| `SUPPRESSED by blacklist rule …` | Matched something you blacklisted; it is in the **Suppressed** tab, not lost |
+| `classification FAILED after …` | Ollama problem; the message stays retryable via **Retry failed messages** |
+| `Classification paused: … circuit breaker is open` | Repeated failures; work is queued, not dropped |
+
+Turn on **Settings ▸ General ▸ Verbose logging** to add the reasoning behind each
+of those: cleaned body size, the model's own explanation, queue depths, and why
+the sweep watermark is or is not advancing. It applies immediately — no restart —
+which matters when you are waiting on the next arrival to reproduce something.
+
+`ItemAdd fired for […]` and `NewMailEx fired for […]` are logged at normal level
+on purpose. Their failure mode is a garbage-collected COM event sink, which is
+otherwise indistinguishable from an idle mailbox; if mail is arriving and neither
+line ever appears, the periodic sweep is carrying the app on its own.

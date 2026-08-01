@@ -59,11 +59,15 @@ public partial class App : Application
         var paths = new AppPaths();
         paths.EnsureCreated();
 
-        _loggerFactory = SerilogSetup.Create(paths.LogDirectory);
-        var logger = _loggerFactory.CreateLogger<App>();
-
+        // Settings first, deliberately: the verbose flag decides the log level, and a
+        // logger created before it would miss startup at the level the user asked for.
+        // SettingsStore takes no logger and falls back to defaults on a corrupt file, so
+        // nothing worth logging can happen before this line.
         var settingsStore = new SettingsStore(paths.SettingsPath);
         var settings = await settingsStore.LoadAsync();
+
+        _loggerFactory = SerilogSetup.Create(paths.LogDirectory, settings.General.VerboseLogging);
+        var logger = _loggerFactory.CreateLogger<App>();
 
         if (string.IsNullOrWhiteSpace(settings.Calendar.TimeZone))
         {
@@ -125,7 +129,9 @@ public partial class App : Application
             await ShowReviewAsync();
         }
 
-        logger.LogInformation("OutlookScraper started.");
+        logger.LogInformation(
+            "OutlookScraper started. Verbose logging is {State}.",
+            settings.General.VerboseLogging ? "on" : "off (enable it in Settings ▸ General)");
     }
 
     private static bool IsTrayLaunch() =>

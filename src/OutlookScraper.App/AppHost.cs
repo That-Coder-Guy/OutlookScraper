@@ -103,8 +103,15 @@ public sealed class AppHost : IAsyncDisposable
     }
 
     /// <summary>Enqueued as live so a new arrival always jumps ahead of a backfill.</summary>
-    private void OnEntryIdArrived(object? sender, string entryId) =>
+    private void OnEntryIdArrived(object? sender, string entryId)
+    {
+        _logger?.LogDebug("Queued [{Id}] from a live Outlook event.", Tail(entryId));
         _ = _queue.EnqueueLiveAsync(entryId, _stopping.Token).AsTask();
+    }
+
+    private static string Tail(string entryId) =>
+        string.IsNullOrEmpty(entryId) ? "?" :
+        entryId.Length <= 10 ? entryId : entryId[^10..];
 
     /// <summary>
     /// The mandatory safety net. Outlook's ItemAdd event does not fire when more than
@@ -152,7 +159,9 @@ public sealed class AppHost : IAsyncDisposable
                 return;
             }
 
-            _logger?.LogInformation("Sweep found {Count} message(s) since {Since}.", messages.Count, since);
+            _logger?.LogInformation(
+                "Sweep found {Count} message(s) since {Since:yyyy-MM-dd HH:mm}; queueing as {Priority}.",
+                messages.Count, since, isFirstRun ? "backfill" : "live");
 
             foreach (var email in messages)
             {
@@ -172,6 +181,10 @@ public sealed class AppHost : IAsyncDisposable
             // message in the batch has reached a terminal state — advancing on enqueue
             // would permanently lose mail if Ollama went down mid-backfill.
             await AdvanceWatermarkIfDrainedAsync(messages, ct);
+
+            _logger?.LogDebug(
+                "Queue depth after sweep: {Live} live, {Backfill} backfill.",
+                _queue.PendingLive, _queue.PendingBackfill);
 
             if (isFirstRun)
             {
@@ -197,6 +210,13 @@ public sealed class AppHost : IAsyncDisposable
 
             if (record is null || !record.IsTerminal)
             {
+                // Deliberate: the watermark only moves once every message in the batch
+                // is finished, so a failure re-sweeps rather than being lost. Worth
+                // logging, because a stuck watermark otherwise looks like a bug.
+                _logger?.LogDebug(
+                    "Sweep watermark held back: [{Id}] is {Status}.",
+                    Tail(email.EntryId), record?.Status.ToString() ?? "unprocessed");
+
                 return;
             }
         }

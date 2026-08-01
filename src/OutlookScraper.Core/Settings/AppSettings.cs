@@ -113,6 +113,14 @@ public sealed class GeneralSettings
 
     public int RetentionDays { get; set; } = 180;
 
+    /// <summary>
+    /// Writes Debug-level detail to the log: per-message body sizes, the model's
+    /// reasoning, queue depths, and why the sweep watermark is or is not advancing.
+    /// Off by default because it is noisy; the per-message outcome lines are logged at
+    /// Information either way.
+    /// </summary>
+    public bool VerboseLogging { get; set; }
+
     /// <summary>Raw model output is nulled out this many days after classification.</summary>
     public int RawJsonRetentionDays { get; set; } = 30;
 

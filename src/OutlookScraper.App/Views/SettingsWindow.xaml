@@ -152,6 +152,14 @@
                     <TextBlock Text="Keep processed mail for (days)" />
                     <TextBox Text="{Binding Settings.General.RetentionDays}" />
 
+                    <CheckBox Content="Verbose logging" IsChecked="{Binding VerboseLogging}"
+                              Margin="0,12,0,0" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Records why each email was or was not treated as a free-food
+                                     event: body size after cleaning, how long the model took, its
+                                     reasoning, and the queue depth. Takes effect immediately —
+                                     turn it on, then watch the log as the next mail arrives." />
+
                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <Button Content="Send test notification"
                                 Command="{Binding SendTestToastCommand}" />
