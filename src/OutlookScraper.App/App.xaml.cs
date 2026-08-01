@@ -83,11 +83,17 @@ public partial class App : Application
         var router = _services.GetRequiredService<ToastActivationRouter>();
         router.Subscribe();
 
-        if (!ToastRegistration.IsRegistrationCurrent(out var reason))
+        // Informational. Nothing is registered until the first notification is shown, so
+        // "not registered yet" on a fresh install is expected and must not read as a
+        // fault. Only a stale registration — the app was moved, which breaks toasts
+        // silently — is worth a warning.
+        if (ToastRegistration.LooksStale(out var registrationDetail))
         {
-            // Not fatal — the compat layer re-registers on the first Show. Worth a log
-            // line because a silent toast failure is otherwise undiagnosable.
-            logger.LogWarning("Toast registration needs repair: {Reason}", reason);
+            logger.LogWarning("Toast registration is stale: {Detail}", registrationDetail);
+        }
+        else
+        {
+            logger.LogInformation("Toast registration: {Detail}", registrationDetail);
         }
 
         var runAtLogin = _services.GetRequiredService<RunAtLoginService>();

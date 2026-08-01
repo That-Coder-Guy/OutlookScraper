@@ -25,6 +25,46 @@
     <ProjectReference Include="../OutlookScraper.Core/OutlookScraper.Core.csproj" />
   </ItemGroup>
 
+  <!--
+    The <EmbedInteropTypes> metadata above does not reliably reach the resolved
+    reference when it comes from a PackageReference, so it is reapplied here after
+    references are resolved. Without this the flag is silently ignored and the build
+    still emits AssemblyRefs to the interop assembly — which is exactly the failure
+    that only shows up at runtime.
+
+    Verify with: the built assembly must have no TypeRef whose resolution scope is
+    Microsoft.Office.Interop.Outlook.
+  -->
+  <Target Name="ForceEmbedOutlookInterop" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <ReferencePath Condition="'%(FileName)' == 'Microsoft.Office.Interop.Outlook'">
+        <EmbedInteropTypes>true</EmbedInteropTypes>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
+
+  <!--
+    Fail loudly if embedding ever stops applying. This is worth a guard because the
+    failure is invisible at build time: the project compiles perfectly and then dies on
+    first contact with Outlook, which is the slowest possible way to find out.
+  -->
+  <Target Name="VerifyOutlookInteropEmbedded" BeforeTargets="CoreCompile">
+    <!--
+      WithMetadataValue rather than a %(EmbedInteropTypes) condition: when the metadata
+      is absent entirely — which is precisely the broken case this guard exists to
+      catch — a bare %() reference fails with MSB4096 and buries the real message.
+    -->
+    <ItemGroup>
+      <_InteropRef
+        Include="@(ReferencePath->WithMetadataValue('FileName','Microsoft.Office.Interop.Outlook'))" />
+      <_InteropEmbedded
+        Include="@(ReferencePath->WithMetadataValue('FileName','Microsoft.Office.Interop.Outlook')->WithMetadataValue('EmbedInteropTypes','true'))" />
+    </ItemGroup>
+
+    <Error Condition="'@(_InteropRef)' != '' and '@(_InteropEmbedded)' == ''"
+           Text="Microsoft.Office.Interop.Outlook is referenced but NOT embedded. The build would succeed and then fail at runtime with a missing 'office' assembly. Check the ForceEmbedOutlookInterop target." />
+  </Target>
+
   <ItemGroup>
     <!--
       The NuGet package rather than a <COMReference>. This matters: the package
@@ -32,7 +72,24 @@
       Office installed. A <COMReference> would require Outlook on every CI runner
       and would leave this project permanently unverified.
     -->
-    <PackageReference Include="Microsoft.Office.Interop.Outlook" Version="15.0.4797.1004" />
+    <!--
+      EmbedInteropTypes is load-bearing, not an optimisation.
+
+      This package ships Microsoft.Office.Interop.Outlook.dll and declares no
+      dependencies, but that assembly references `office` (the Office core PIA), which
+      on .NET Framework was resolved from the GAC. .NET 8 has no GAC, so at runtime the
+      very first use of an interop type threw:
+
+          FileNotFoundException: Could not load file or assembly 'office,
+          Version=15.0.0.0, ...'
+
+      It compiled cleanly and failed only when the app actually ran. Embedding copies
+      just the interop types this project uses into its own assembly, so there is no
+      runtime dependency on either Microsoft.Office.Interop.Outlook.dll or office.dll.
+    -->
+    <PackageReference Include="Microsoft.Office.Interop.Outlook" Version="15.0.4797.1004">
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </PackageReference>
   </ItemGroup>
 
   <!--

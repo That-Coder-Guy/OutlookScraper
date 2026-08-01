@@ -4,84 +4,99 @@ using Microsoft.Win32;
 namespace OutlookScraper.App.Notifications;
 
 /// <summary>
-/// Verifies — and repairs — the shell registration an unpackaged app needs before
-/// Windows will show it a toast.
+/// Best-effort reporting on the shell registration that unpackaged toasts depend on.
 /// </summary>
 /// <remarks>
-/// Three things must exist, and <c>ToastNotificationManagerCompat</c> creates them on
-/// first use:
+/// Advisory only, and deliberately so.
 ///
-/// <list type="number">
-/// <item>A Start Menu shortcut carrying <c>System.AppUserModel.ID</c> and
-/// <c>System.AppUserModel.ToastActivatorCLSID</c> in its property store.</item>
-/// <item>A matching AUMID.</item>
-/// <item>A COM activator under
-/// <c>HKCU\SOFTWARE\Classes\CLSID\{guid}\LocalServer32</c>.</item>
-/// </list>
+/// An unpackaged app needs a Start Menu shortcut carrying an AppUserModelID and a
+/// registered COM activator before Windows will show it a toast, and when they are
+/// missing Windows fails silently — no toast, no error. That is worth surfacing.
 ///
-/// <b>When the shortcut is missing, Windows silently does nothing.</b> No toast, no
-/// exception, no error code — which makes it the single most common cause of "toasts
-/// stopped working" and impossible to diagnose from inside the app.
+/// But the notification compat layer <b>derives its own AUMID</b> and creates the
+/// registration lazily, so "nothing found" before the first toast is the normal state
+/// on a fresh install, not a fault. An earlier version of this class invented its own
+/// AUMID constant and asserted the registry must contain it; that key is never written
+/// by anyone, so the check always failed and — worse — it was used to gate the
+/// "send test notification" button, which meant the diagnostic built to prove toasts
+/// worked was the thing preventing them from being tried.
 ///
-/// Because the registration bakes in the executable's path, moving or renaming the exe
-/// breaks it just as silently. This check runs at every startup for that reason, and
-/// the Settings window has a "send test notification" button so the user can confirm
-/// the whole path end to end.
+/// Hence: report, never gate.
 /// </remarks>
 [SupportedOSPlatform("windows")]
 public static class ToastRegistration
 {
-    /// <summary>Must match the id the compat layer registers, and stay stable across versions.</summary>
-    public const string ApplicationId = "OutlookScraper.FreeFoodWatcher";
-
     private const string ClassesRoot = @"SOFTWARE\Classes";
 
     /// <summary>
-    /// Returns true when the registered executable path still matches this process.
-    /// A mismatch means the app was moved and toasts will silently fail.
+    /// A human-readable description of what is currently registered, for logs and the
+    /// settings screen. Never throws.
     /// </summary>
-    public static bool IsRegistrationCurrent(out string? reason)
+    public static string Describe()
     {
         var currentPath = Environment.ProcessPath;
 
         if (string.IsNullOrEmpty(currentPath))
         {
-            reason = "Could not determine the current executable path.";
-            return false;
+            return "Could not determine the running executable's path.";
         }
 
-        using var aumidKey = Registry.CurrentUser.OpenSubKey(
-            $@"{ClassesRoot}\AppUserModelId\{ApplicationId}");
-
-        if (aumidKey is null)
+        try
         {
-            reason = "The AppUserModelId registration is missing.";
-            return false;
+            var registeredPath = FindRegisteredServerPath();
+
+            if (registeredPath is null)
+            {
+                return "No toast COM activator is registered yet. This is normal before " +
+                       "the first notification — the notification layer registers itself " +
+                       "on first use.";
+            }
+
+            return registeredPath.Contains(currentPath, StringComparison.OrdinalIgnoreCase)
+                ? "Toast activator is registered for this executable."
+                : $"Toast activator is registered for '{registeredPath}', but this copy is " +
+                  $"running from '{currentPath}'. Moving or renaming the executable breaks " +
+                  "notifications silently; sending a test notification re-registers it.";
         }
-
-        var registeredPath = FindRegisteredServerPath();
-
-        if (registeredPath is null)
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException)
         {
-            reason = "The toast COM activator is not registered.";
-            return false;
+            return "Could not read the toast registration: " + ex.Message;
         }
+    }
 
-        if (!registeredPath.Contains(currentPath, StringComparison.OrdinalIgnoreCase))
+    /// <summary>
+    /// True only when an activator is registered and points somewhere other than this
+    /// executable — the one case genuinely worth warning about, because it is the
+    /// silent-failure mode after the app is moved.
+    /// </summary>
+    public static bool LooksStale(out string detail)
+    {
+        detail = Describe();
+
+        var currentPath = Environment.ProcessPath;
+
+        if (string.IsNullOrEmpty(currentPath))
         {
-            reason = $"Registered for '{registeredPath}' but running from '{currentPath}'. " +
-                     "The application was moved or renamed.";
             return false;
         }
 
-        reason = null;
-        return true;
+        try
+        {
+            var registeredPath = FindRegisteredServerPath();
+
+            return registeredPath is not null &&
+                   !registeredPath.Contains(currentPath, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
     /// Walks the registered CLSIDs looking for a LocalServer32 pointing at this app.
-    /// The activator GUID is generated by the compat layer, so it has to be found rather
-    /// than assumed.
+    /// The activator GUID is generated by the notification layer, so it has to be found
+    /// rather than assumed — which is precisely the mistake the old AUMID check made.
     /// </summary>
     private static string? FindRegisteredServerPath()
     {

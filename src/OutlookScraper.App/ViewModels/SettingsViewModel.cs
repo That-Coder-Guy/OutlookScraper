@@ -256,18 +256,28 @@ public sealed class SettingsViewModel : ObservableObject
         TagTestResult = $"'{keyA}' vs '{keyB}' — {verdict}.";
     }
 
+    /// <summary>
+    /// Always attempts the notification, and reports whatever actually happened.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not gated on a registration check. Showing the toast is what causes
+    /// the notification layer to register in the first place, so refusing to send when
+    /// nothing is registered yet would mean the button could never succeed on a fresh
+    /// install — and that is exactly the bug an earlier version had.
+    /// </remarks>
     private async Task SendTestToastAsync()
     {
-        if (!ToastRegistration.IsRegistrationCurrent(out var reason))
+        try
         {
-            StatusMessage = "Toast registration problem: " + reason;
-            return;
+            await _notifier.ShowStatusAsync(
+                "OutlookScraper", "Notifications are working. This is a test.");
+
+            StatusMessage = "Test notification sent. " + ToastRegistration.Describe();
         }
-
-        await _notifier.ShowStatusAsync(
-            "OutlookScraper", "Notifications are working. This is a test.");
-
-        StatusMessage = "Test notification sent.";
+        catch (Exception ex)
+        {
+            StatusMessage = "Could not send a notification: " + ex.Message;
+        }
     }
 
     private async Task SaveAsync()
