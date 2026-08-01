@@ -108,13 +108,34 @@ public sealed class PipelineTests : IDisposable
     }
 
     [Fact]
-    public async Task SkipsBodiesWithNothingInThem()
+    public async Task SkipsMessagesWithNothingInThem()
     {
         var outcome = await Create().ProcessAsync(
-            TestData.Email(body: "thanks"), CancellationToken.None);
+            TestData.Email(subject: "re: ok", body: "thanks"), CancellationToken.None);
 
         outcome.SkipReason.Should().Be(SkipReason.BodyTooShort);
         _classifier.Calls.Should().Be(0);
+    }
+
+    /// <summary>
+    /// The whole announcement can live in the subject line — "Free pizza at the
+    /// engineering building" with a two-word body is a real email, and the prompt
+    /// includes the subject, so gating on body length alone discarded classifiable mail
+    /// before the model ever saw it.
+    /// </summary>
+    [Fact]
+    public async Task ClassifiesAShortBodyWhenTheSubjectCarriesTheAnnouncement()
+    {
+        _classifier.Result = TestData.FreeFoodEvent();
+
+        var outcome = await Create().ProcessAsync(
+            TestData.Email(
+                subject: "Free pizza at the engineering building",
+                body: "Come by!"),
+            CancellationToken.None);
+
+        _classifier.Calls.Should().Be(1);
+        outcome.Kind.Should().Be(PipelineOutcomeKind.Suggested);
     }
 
     [Fact]

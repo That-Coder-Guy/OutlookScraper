@@ -175,7 +175,8 @@ distinguishable from each other after the fact:
 
 | Line | What it means |
 |---|---|
-| `skipped: auto-reply`, `body too short`, `not a mail item` | Filtered before the model was asked |
+| `skipped: auto-reply`, `too little text`, `not a mail item` | Filtered before the model was asked |
+| `still waiting on … after 20s` | The model is loading or thinking, not wedged. Cold 8B loads take about a minute |
 | `skipped: identical body already classified as [...]` | A listserv resend, reusing the earlier verdict |
 | `not a free-food event (not an event / food is not free / confidence … below …)` | The model was asked and said no — and which of the three conditions failed |
 | `SUPPRESSED by blacklist rule …` | Matched something you blacklisted; it is in the **Suppressed** tab, not lost |

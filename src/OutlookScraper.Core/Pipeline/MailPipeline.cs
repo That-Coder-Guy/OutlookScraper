@@ -106,11 +106,12 @@ public sealed class MailPipeline(
             string.IsNullOrWhiteSpace(email.PlainBody) ? "HTML" : "plain text",
             cleaned.BodyHash[..8]);
 
-        if (cleaned.Body.Length < EmailPreparer.MinimumBodyChars)
+        if (cleaned.SignalLength < EmailPreparer.MinimumSignalChars)
         {
             _logger?.LogInformation(
-                "[{Id}] skipped: body too short ({Length} < {Minimum} chars after cleaning).",
-                id, cleaned.Body.Length, EmailPreparer.MinimumBodyChars);
+                "[{Id}] skipped: too little text ({Signal} chars of subject + body, "
+                + "under the {Minimum} minimum).",
+                id, cleaned.SignalLength, EmailPreparer.MinimumSignalChars);
 
             await _messages.MarkSkippedAsync(
                 email.EntryId, SkipReason.BodyTooShort, cleaned.BodyHash, ct);
@@ -143,7 +144,7 @@ public sealed class MailPipeline(
                 "[{Id}] asking {Model} to classify {Length} chars.",
                 id, _settings.Ollama.Model, cleaned.Body.Length);
 
-            classification = await _classifier.ClassifyAsync(cleaned, ct);
+            classification = await ClassifyWithHeartbeatAsync(id, cleaned, stopwatch, ct);
             stopwatch.Stop();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -232,6 +233,49 @@ public sealed class MailPipeline(
             id, Trim(suggestion.Title, 60));
 
         return new PipelineOutcome(PipelineOutcomeKind.Suggested, suggestion);
+    }
+
+    /// <summary>How long a classification may run before the log says it is still alive.</summary>
+    private static readonly TimeSpan HeartbeatAfter = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Runs the classifier, logging a line if it takes long enough that the log would
+    /// otherwise look like the app had stopped.
+    /// </summary>
+    /// <remarks>
+    /// The first classification after Ollama starts pays for loading the model into
+    /// VRAM, which on a cold 8B model is comfortably a minute. Without this, that minute
+    /// is a gap between "processing" and nothing at all — indistinguishable from a hang,
+    /// a deadlocked STA thread or a crashed worker. Saying "still waiting, 20s of a 90s
+    /// timeout" costs one line and answers the question outright.
+    /// </remarks>
+    private async Task<ClassificationResult> ClassifyWithHeartbeatAsync(
+        string id,
+        CleanedEmail cleaned,
+        System.Diagnostics.Stopwatch stopwatch,
+        CancellationToken ct)
+    {
+        var classification = _classifier.ClassifyAsync(cleaned, ct);
+
+        while (true)
+        {
+            var heartbeat = Task.Delay(HeartbeatAfter, ct);
+
+            if (await Task.WhenAny(classification, heartbeat) == classification)
+            {
+                // Awaited rather than returned directly so a fault surfaces as its own
+                // exception rather than an AggregateException.
+                return await classification;
+            }
+
+            _logger?.LogInformation(
+                "[{Id}] still waiting on {Model} after {Elapsed:n0}s (timeout is {Timeout}s). "
+                + "A cold model load is slow the first time and fast afterwards.",
+                id,
+                _settings.Ollama.Model,
+                stopwatch.Elapsed.TotalSeconds,
+                _settings.Ollama.RequestTimeoutSeconds);
+        }
     }
 
     /// <summary>

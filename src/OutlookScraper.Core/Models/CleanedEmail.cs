@@ -14,6 +14,13 @@ public sealed record CleanedEmail(
     string BodyHash)
 {
     /// <summary>
+    /// How much text the model actually receives — subject included, because the prompt
+    /// includes it. A three-line announcement with everything in the subject line is a
+    /// perfectly classifiable email, and measuring only the body throws it away.
+    /// </summary>
+    public int SignalLength => Subject.Trim().Length + Body.Length;
+
+    /// <summary>
     /// Shown in the review window so the user can sanity-check what the model saw.
     /// </summary>
     public string Excerpt(int maxChars = 600) =>
